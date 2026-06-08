@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Generation with AI — Task 3</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050508;
+    --bg2: #0a0a12;
+    --cyan: #00f5d4;
+    --purple: #b44fff;
+    --pink: #ff2d78;
+    --yellow: #ffe433;
+    --white: #f0f0f8;
+    --muted: #555570;
+    --card: rgba(255,255,255,0.03);
+    --border: rgba(0,245,212,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  .cursor {
+    position: fixed;
+    width: 12px; height: 12px;
+    background: var(--cyan);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s;
+    box-shadow: 0 0 20px var(--cyan);
+  }
+  .cursor-ring {
+    position: fixed;
+    width: 36px; height: 36px;
+    border: 1px solid rgba(0,245,212,0.4);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: all 0.15s ease;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* Hero */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 2rem;
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 100%, rgba(0,245,212,0.07) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 40% at 20% 50%, rgba(180,79,255,0.05) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 60% at 80% 20%, rgba(255,45,120,0.04) 0%, transparent 60%);
+  }
+
+  /* Waveform canvas */
+  .waveform-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 200px;
+    overflow: hidden;
+  }
+
+  canvas#waveform {
+    width: 100%;
+    height: 100%;
+  }
+
+  .hero-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    color: var(--cyan);
+    border: 1px solid var(--border);
+    padding: 0.4rem 1.2rem;
+    border-radius: 2px;
+    margin-bottom: 2rem;
+    animation: fadeUp 0.8s ease both;
+    background: rgba(0,245,212,0.05);
+  }
+
+  .hero-title {
+    font-size: clamp(3rem, 8vw, 7rem);
+    font-weight: 800;
+    line-height: 0.95;
+    text-align: center;
+    animation: fadeUp 0.8s 0.1s ease both;
+    position: relative;
+    z-index: 2;
+  }
+
+  .hero-title .line1 { color: var(--white); display: block; }
+  .hero-title .line2 {
+    display: block;
+    background: linear-gradient(90deg, var(--cyan), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    margin-top: 1.5rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    animation: fadeUp 0.8s 0.2s ease both;
+    position: relative;
+    z-index: 2;
+  }
+
+  .hero-sub span { color: var(--cyan); }
+
+  /* Equalizer bars hero */
+  .eq-hero {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    margin-top: 3rem;
+    animation: fadeUp 0.8s 0.3s ease both;
+    position: relative;
+    z-index: 2;
+  }
+
+  .eq-bar {
+    width: 6px;
+    background: linear-gradient(to top, var(--cyan), var(--purple));
+    border-radius: 3px 3px 0 0;
+    animation: eqAnim var(--dur) ease-in-out infinite alternate;
+  }
+
+  @keyframes eqAnim {
+    from { height: var(--min); }
+    to { height: var(--max); }
+  }
+
+  /* Stats strip */
+  .stats-strip {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    padding: 0 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+  }
+
+  .stat-item {
+    flex: 1;
+    padding: 2.5rem 1.5rem;
+    border: 1px solid var(--border);
+    border-right: none;
+    text-align: center;
+    background: var(--card);
+    position: relative;
+    overflow: hidden;
+    transition: background 0.3s;
+  }
+  .stat-item:last-child { border-right: 1px solid var(--border); }
+  .stat-item:hover { background: rgba(0,245,212,0.05); }
+
+  .stat-item::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--purple));
+    transform: scaleX(0);
+    transition: transform 0.3s;
+  }
+  .stat-item:hover::before { transform: scaleX(1); }
+
+  .stat-num {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--cyan);
+    display: block;
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-top: 0.5rem;
+    display: block;
+    text-transform: uppercase;
+  }
+
+  /* Section */
+  section {
+    padding: 6rem 2rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    max-width: 60px;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .section-title {
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 3rem;
+  }
+
+  /* Pipeline */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    position: relative;
+  }
+
+  .pipeline::before {
+    content: '';
+    position: absolute;
+    top: 48px;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--pink), transparent);
+    z-index: 0;
+  }
+
+  .pipe-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 1.5rem 0.5rem;
+    position: relative;
+    z-index: 1;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .pipe-step:nth-child(1) { animation-delay: 0.1s; }
+  .pipe-step:nth-child(2) { animation-delay: 0.2s; }
+  .pipe-step:nth-child(3) { animation-delay: 0.3s; }
+  .pipe-step:nth-child(4) { animation-delay: 0.4s; }
+  .pipe-step:nth-child(5) { animation-delay: 0.5s; }
+
+  .pipe-icon {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    position: relative;
+    transition: all 0.3s;
+  }
+
+  .pipe-step:hover .pipe-icon {
+    border-color: var(--cyan);
+    box-shadow: 0 0 30px rgba(0,245,212,0.3);
+    transform: scale(1.1);
+  }
+
+  .pipe-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--cyan);
+    margin-bottom: 0.4rem;
+    letter-spacing: 0.1em;
+  }
+
+  .pipe-name {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 0.3rem;
+  }
+
+  .pipe-desc {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Architecture */
+  .arch-block {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 2.5rem;
+    font-family: 'Space Mono', monospace;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .arch-block::before {
+    content: '// MODEL ARCHITECTURE';
+    position: absolute;
+    top: 1rem; right: 1.5rem;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .arch-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .arch-row:last-child { border-bottom: none; }
+
+  .arch-layer {
+    flex: 1;
+    background: rgba(0,245,212,0.05);
+    border: 1px solid rgba(0,245,212,0.2);
+    padding: 0.8rem 1.2rem;
+    border-radius: 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s;
+  }
+  .arch-layer:hover {
+    background: rgba(0,245,212,0.1);
+    border-color: var(--cyan);
+  }
+
+  .arch-layer-name { font-size: 0.8rem; color: var(--cyan); }
+  .arch-layer-detail { font-size: 0.65rem; color: var(--muted); }
+
+  .arch-arrow {
+    font-size: 0.8rem;
+    color: var(--purple);
+    flex-shrink: 0;
+  }
+
+  /* Tech stack */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+
+  .tech-card {
+    background: var(--bg);
+    padding: 2rem 1.5rem;
+    transition: background 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .tech-card:hover { background: rgba(0,245,212,0.04); }
+
+  .tech-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    display: block;
+  }
+
+  .tech-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--cyan);
+    margin-bottom: 0.3rem;
+    font-weight: 700;
+  }
+
+  .tech-role {
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Terminal block */
+  .terminal {
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    overflow: hidden;
+  }
+
+  .terminal-bar {
+    background: #111;
+    padding: 0.8rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .t-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+  .t-dot:nth-child(1) { background: #ff5f56; }
+  .t-dot:nth-child(2) { background: #ffbd2e; }
+  .t-dot:nth-child(3) { background: #27c93f; }
+
+  .terminal-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-left: auto;
+    letter-spacing: 0.1em;
+  }
+
+  .terminal-body {
+    padding: 1.5rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 2;
+  }
+
+  .t-prompt { color: var(--cyan); }
+  .t-cmd { color: var(--white); }
+  .t-output { color: #666; }
+  .t-success { color: #27c93f; }
+  .t-num { color: var(--yellow); }
+
+  /* Live EQ section */
+  .eq-section {
+    text-align: center;
+    padding: 4rem 2rem;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .eq-bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 5px;
+    height: 100px;
+    margin: 2rem auto;
+  }
+
+  .eq-b {
+    width: 8px;
+    border-radius: 4px 4px 0 0;
+    animation: eqAnim var(--dur) ease-in-out infinite alternate;
+  }
+
+  /* Footer */
+  footer {
+    padding: 3rem 2rem;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  footer a {
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  footer a:hover { text-decoration: underline; }
+
+  /* Animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 0 2rem;
+  }
+
+  /* Glitch effect on title */
+  .glitch {
+    position: relative;
+  }
+  .glitch::before, .glitch::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, var(--cyan), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glitch::before {
+    animation: glitch1 4s infinite;
+    clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
+  }
+  .glitch::after {
+    animation: glitch2 4s infinite;
+    clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
+  }
+
+  @keyframes glitch1 {
+    0%, 90%, 100% { transform: translate(0); }
+    92% { transform: translate(-2px, 1px); }
+    94% { transform: translate(2px, -1px); }
+    96% { transform: translate(0); }
+  }
+  @keyframes glitch2 {
+    0%, 90%, 100% { transform: translate(0); }
+    93% { transform: translate(2px, 1px); }
+    95% { transform: translate(-2px, -1px); }
+    97% { transform: translate(0); }
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .pipeline { grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .pipeline::before { display: none; }
+    .stats-strip { flex-wrap: wrap; }
+    .stat-item { flex: 1 1 45%; border-right: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-bg"></div>
+
+  <div class="hero-badge">◈ CODEALPHA INTERNSHIP — TASK 03</div>
+
+  <h1 class="hero-title">
+    <span class="line1">MUSIC</span>
+    <span class="line2 glitch" data-text="GENERATION">GENERATION</span>
+    <span class="line1" style="font-size:0.45em; color: var(--muted); font-weight:400; letter-spacing:0.3em;">WITH ARTIFICIAL INTELLIGENCE</span>
+  </h1>
+
+  <p class="hero-sub">
+    LSTM Neural Network &nbsp;·&nbsp; <span>11,254 Notes Learned</span> &nbsp;·&nbsp; Classical Piano MIDI
+  </p>
+
+  <div class="eq-hero" id="eqHero"></div>
+
+  <div class="waveform-container">
+    <canvas id="waveform"></canvas>
+  </div>
+</div>
+
+<!-- STATS -->
+<div style="background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="stats-strip">
+    <div class="stat-item">
+      <span class="stat-num">14</span>
+      <span class="stat-label">MIDI Files</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-num">11,254</span>
+      <span class="stat-label">Notes Extracted</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-num">480</span>
+      <span class="stat-label">Unique Notes</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-num">4.3M</span>
+      <span class="stat-label">Parameters</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-num">200</span>
+      <span class="stat-label">Notes Generated</span>
+    </div>
+  </div>
+</div>
+
+<!-- PIPELINE -->
+<section>
+  <div class="section-label">01 — PIPELINE</div>
+  <h2 class="section-title">How It <span style="color:var(--cyan)">Works</span></h2>
+
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="pipe-icon">🎼</div>
+      <div class="pipe-num">STEP 01</div>
+      <div class="pipe-name">Collect Data</div>
+      <div class="pipe-desc">14 classical piano MIDI files from bitmidi.com</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">⚙️</div>
+      <div class="pipe-num">STEP 02</div>
+      <div class="pipe-name">Preprocess</div>
+      <div class="pipe-desc">music21 parses MIDI into note sequences</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">🧠</div>
+      <div class="pipe-num">STEP 03</div>
+      <div class="pipe-name">Build LSTM</div>
+      <div class="pipe-desc">2-layer LSTM with 4.3M parameters</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">📈</div>
+      <div class="pipe-num">STEP 04</div>
+      <div class="pipe-name">Train Model</div>
+      <div class="pipe-desc">20 epochs, loss 4.79 → 4.08</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">🎵</div>
+      <div class="pipe-num">STEP 05</div>
+      <div class="pipe-name">Generate</div>
+      <div class="pipe-desc">200 new notes composed as MIDI</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- LIVE EQ -->
+<div class="eq-section">
+  <div class="section-label" style="justify-content:center">◈ AI COMPOSING</div>
+  <h2 style="font-size:1.5rem; font-weight:800; margin-bottom:0.5rem;">Live Generation Simulation</h2>
+  <p style="font-family:'Space Mono',monospace; font-size:0.7rem; color:var(--muted);">Visualizing the LSTM's note prediction rhythm</p>
+  <div class="eq-bars" id="eqBars"></div>
+  <p style="font-family:'Space Mono',monospace; font-size:0.65rem; color:var(--muted); letter-spacing:0.15em;">OUTPUT/GENERATED_MUSIC.MID</p>
+</div>
+
+<div class="divider"></div>
+
+<!-- ARCHITECTURE -->
+<section>
+  <div class="section-label">02 — ARCHITECTURE</div>
+  <h2 class="section-title">Model <span style="color:var(--purple)">Design</span></h2>
+
+  <div class="arch-block">
+    <div class="arch-row">
+      <div class="arch-layer">
+        <span class="arch-layer-name">INPUT LAYER</span>
+        <span class="arch-layer-detail">480 × 50 (one-hot encoded note sequences)</span>
+      </div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer">
+        <span class="arch-layer-name">LSTM LAYER 1</span>
+        <span class="arch-layer-detail">hidden_size=512 · batch_first=True</span>
+      </div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer">
+        <span class="arch-layer-name">LSTM LAYER 2</span>
+        <span class="arch-layer-detail">hidden_size=512 · dropout=0.3</span>
+      </div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer">
+        <span class="arch-layer-name">DENSE LAYER</span>
+        <span class="arch-layer-detail">512 → 256 · ReLU activation</span>
+      </div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="border-color:rgba(180,79,255,0.4); background:rgba(180,79,255,0.05);">
+        <span class="arch-layer-name" style="color:var(--purple)">OUTPUT LAYER</span>
+        <span class="arch-layer-detail">480 classes · Temperature sampling (T=0.8)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- TECH STACK -->
+<section>
+  <div class="section-label">03 — TECH STACK</div>
+  <h2 class="section-title">Built <span style="color:var(--pink)">With</span></h2>
+
+  <div class="tech-grid">
+    <div class="tech-card">
+      <span class="tech-icon">🐍</span>
+      <div class="tech-name">Python 3.14</div>
+      <div class="tech-role">Core language for the entire pipeline</div>
+    </div>
+    <div class="tech-card">
+      <span class="tech-icon">🎼</span>
+      <div class="tech-name">music21</div>
+      <div class="tech-role">MIDI parsing, note extraction & audio generation</div>
+    </div>
+    <div class="tech-card">
+      <span class="tech-icon">🔥</span>
+      <div class="tech-name">PyTorch</div>
+      <div class="tech-role">LSTM neural network & training loop</div>
+    </div>
+    <div class="tech-card">
+      <span class="tech-icon">🔢</span>
+      <div class="tech-name">NumPy</div>
+      <div class="tech-role">Sequence arrays & one-hot encoding</div>
+    </div>
+    <div class="tech-card">
+      <span class="tech-icon">📊</span>
+      <div class="tech-name">tqdm</div>
+      <div class="tech-role">Training progress visualization</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- TERMINAL -->
+<section>
+  <div class="section-label">04 — RESULTS</div>
+  <h2 class="section-title">Training <span style="color:var(--yellow)">Output</span></h2>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="t-dot"></div>
+      <div class="t-dot"></div>
+      <div class="t-dot"></div>
+      <span class="terminal-title">POWERSHELL — music_AI</span>
+    </div>
+    <div class="terminal-body">
+      <div><span class="t-prompt">PS music_AI&gt; </span><span class="t-cmd">python preprocess.py</span></div>
+      <div class="t-output">=== Step 2: Preprocessing MIDI Files ===</div>
+      <div class="t-output">Found <span class="t-num">12</span> MIDI files</div>
+      <div class="t-output">Processing MIDI files: 100%|████████| 12/12</div>
+      <div class="t-output">Total notes extracted: <span class="t-num">11,254</span></div>
+      <div class="t-output">Unique notes/chords: <span class="t-num">480</span></div>
+      <div class="t-success">✅ Notes saved to data/notes.pkl</div>
+      <br>
+      <div><span class="t-prompt">PS music_AI&gt; </span><span class="t-cmd">python train.py</span></div>
+      <div class="t-output">Epoch 1/20  — Loss: <span class="t-num">4.7958</span></div>
+      <div class="t-output">Epoch 10/20 — Loss: <span class="t-num">4.5348</span></div>
+      <div class="t-output">Epoch 20/20 — Loss: <span class="t-num">4.0811</span></div>
+      <div class="t-success">✅ Model saved to data/model.pth</div>
+      <br>
+      <div><span class="t-prompt">PS music_AI&gt; </span><span class="t-cmd">python generate.py</span></div>
+      <div class="t-output">Generating <span class="t-num">200</span> notes...</div>
+      <div class="t-output">Converting to MIDI...</div>
+      <div class="t-success">✅ Music generated → output/generated_music.mid</div>
+      <div class="t-output">🎵 Open with VLC to listen!</div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p style="margin-bottom:0.5rem; font-size:0.8rem; color:var(--white); font-family:'Syne',sans-serif; font-weight:700;">ROSHNI SUKHNANI</p>
+  <p>CodeAlpha Internship — Task 3 &nbsp;·&nbsp; <a href="https://github.com/weiwei-gitch" target="_blank">@weiwei-gitch</a></p>
+  <p style="margin-top:0.5rem;">Built with PyTorch · music21 · Python 3.14</p>
+</footer>
+
+<script>
+  // Custom cursor
+  const cursor = document.getElementById('cursor');
+  const ring = document.getElementById('cursorRing');
+  document.addEventListener('mousemove', e => {
+    cursor.style.left = e.clientX + 'px';
+    cursor.style.top = e.clientY + 'px';
+    setTimeout(() => {
+      ring.style.left = e.clientX + 'px';
+      ring.style.top = e.clientY + 'px';
+    }, 80);
+  });
+
+  // Hero EQ bars
+  const eqHero = document.getElementById('eqHero');
+  const heights = [20,35,50,70,90,110,90,70,50,35,20,35,50,70,90,70,50,35,20,35];
+  heights.forEach((h, i) => {
+    const bar = document.createElement('div');
+    bar.className = 'eq-bar';
+    const min = Math.max(10, h * 0.3);
+    bar.style.cssText = `--min:${min}px; --max:${h}px; --dur:${0.4 + Math.random() * 0.6}s; height:${min}px;`;
+    eqHero.appendChild(bar);
+  });
+
+  // Main EQ bars
+  const eqBars = document.getElementById('eqBars');
+  const colors = ['var(--cyan)', 'var(--purple)', 'var(--pink)', 'var(--yellow)', 'var(--cyan)'];
+  for (let i = 0; i < 40; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'eq-b';
+    const maxH = 20 + Math.random() * 80;
+    const minH = 5 + Math.random() * 15;
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    bar.style.cssText = `--min:${minH}px; --max:${maxH}px; --dur:${0.3 + Math.random() * 0.8}s; height:${minH}px; background:${color};`;
+    eqBars.appendChild(bar);
+  }
+
+  // Waveform canvas
+  const canvas = document.getElementById('waveform');
+  const ctx = canvas.getContext('2d');
+  let t = 0;
+
+  function resizeCanvas() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  function drawWave() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Multiple wave layers
+    const waves = [
+      { color: 'rgba(0,245,212,0.4)', freq: 0.015, amp: 30, speed: 0.03, offset: 0 },
+      { color: 'rgba(180,79,255,0.3)', freq: 0.02, amp: 20, speed: 0.05, offset: 1 },
+      { color: 'rgba(255,45,120,0.2)', freq: 0.01, amp: 40, speed: 0.02, offset: 2 },
+    ];
+
+    waves.forEach(w => {
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x++) {
+        const y = H * 0.5
+          + Math.sin(x * w.freq + t * w.speed + w.offset) * w.amp
+          + Math.sin(x * w.freq * 2.3 + t * w.speed * 1.7) * (w.amp * 0.4);
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W, H);
+      ctx.lineTo(0, H);
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, w.color);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+
+    t++;
+    requestAnimationFrame(drawWave);
+  }
+  drawWave();
+</script>
+</body>
+</html>
